@@ -179,6 +179,25 @@ export function SubaccountList() {
     }
   };
 
+  // --- Define handler functions ---
+  const handleDeposit = (subAccountId: number) => {
+    console.log(`Deposit clicked for subaccount: ${subAccountId}`);
+    toast(`Deposit action for subaccount ${subAccountId} (Not implemented yet)`);
+    // TODO: Implement deposit modal/logic
+  };
+
+  const handleWithdraw = (subAccountId: number) => {
+    console.log(`Withdraw clicked for subaccount: ${subAccountId}`);
+    toast.error(`Withdraw action for subaccount ${subAccountId} (Not implemented yet)`);
+    // TODO: Implement withdraw modal/logic
+  };
+
+  const handleTrade = (subAccountId: number) => {
+    console.log(`Trade clicked for subaccount: ${subAccountId}`);
+    toast.success(`Navigate to trade for subaccount ${subAccountId} (Not implemented yet)`);
+    // TODO: Implement navigation to trading view
+  };
+
   // Animation variants
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -466,22 +485,30 @@ export function SubaccountList() {
                   </div>
 
                   <div className="flex space-x-2 pt-4">
-                    <Button 
-                      variant="outline" 
+                    <Button
+                      variant="outline"
                       className="flex-1 group relative overflow-hidden"
-                      // onClick={() => handleDeposit(account.subAccountId)}
+                      onClick={() => handleDeposit(account.subAccountId)}
                     >
                       <span className="absolute inset-0 w-0 bg-gradient-to-r from-primary to-secondary opacity-10 transition-all duration-300 group-hover:w-full"></span>
                       Deposit
                     </Button>
-                    <Button 
-                      className="flex-1 group relative overflow-hidden"
-                      // onClick={() => handleTrade(account.subAccountId)}
+                    <Button
+                      variant="outline"
+                      className="flex-1 group relative overflow-hidden border-red-500/50 text-red-400 hover:bg-red-900/30 hover:text-red-300 hover:border-red-500/80"
+                      onClick={() => handleWithdraw(account.subAccountId)}
                     >
-                      <span className="absolute inset-0 w-0 bg-gradient-to-r from-primary to-secondary opacity-20 transition-all duration-300 group-hover:w-full"></span>
-                      Trade
+                       <span className="absolute inset-0 w-0 bg-gradient-to-r from-red-500 to-pink-600 opacity-10 transition-all duration-300 group-hover:w-full"></span>
+                      Withdraw
                     </Button>
                   </div>
+                  <Button
+                    className="w-full mt-2 group relative overflow-hidden bg-gradient-to-r from-primary to-secondary text-black"
+                    onClick={() => handleTrade(account.subAccountId)}
+                  >
+                    <span className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
+                    Trade
+                  </Button>
                 </div>
               </CardContent>
             </Card>

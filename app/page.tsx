@@ -70,20 +70,6 @@ export default function Home() {
           >
             <h1 className="text-5xl sm:text-6xl font-bold mb-6 relative">
               <span className="gradient-text">Drift</span> Trading Platform
-              <motion.div 
-                className="absolute top-[-40px] right-[-40px] sm:right-[calc(50%-200px)] text-5xl"
-                animate={{ 
-                  y: [0, -10, 0],
-                  rotate: [0, 5, 0]
-                }}
-                transition={{ 
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut"
-                }}
-              >
-                ✨
-              </motion.div>
             </h1>
             <motion.p 
               className="text-gray-400 text-lg max-w-2xl mx-auto"

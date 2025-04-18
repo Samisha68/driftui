@@ -5,7 +5,7 @@
 :root {
   --foreground-rgb: 255, 255, 255;
   --background-rgb: 10, 10, 10;
-  --gradient-start: #00FFA3;
+  --gradient-start: #19D9A4;
   --gradient-end: #00B8FF;
   --accent-purple: #7B5FFB;
   --accent-pink: #DC1FFF;
@@ -23,6 +23,11 @@ body {
   background-size: 100px 100px;
   position: relative;
   overflow-x: hidden;
+}
+
+/* Apply Inter font to headings */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Inter', sans-serif;
 }
 
 /* Add a subtle animated glow to the background */
@@ -193,8 +198,8 @@ body::before {
   }
   
   .input {
-    @apply bg-background border border-gray-700 rounded-lg px-4 py-2 focus:outline-none 
-    focus:ring-2 focus:ring-primary transition-all duration-200;
+    @apply bg-surface border border-gray-800 rounded-md px-3 py-2 focus:outline-none 
+    focus:border-primary/80 transition-colors duration-200 text-white placeholder-gray-500;
   }
 
   .nav-link {
