@@ -1,0 +1,251 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-rgb: 10, 10, 10;
+  --gradient-start: #00FFA3;
+  --gradient-end: #00B8FF;
+  --accent-purple: #7B5FFB;
+  --accent-pink: #DC1FFF;
+  --glow-intensity: 0.75;
+}
+
+/* Add a subtle background pattern */
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  min-height: 100vh;
+  background-image: 
+    radial-gradient(circle at 25px 25px, rgba(255, 255, 255, 0.01) 2px, transparent 0),
+    radial-gradient(circle at 75px 75px, rgba(255, 255, 255, 0.01) 2px, transparent 0);
+  background-size: 100px 100px;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Add a subtle animated glow to the background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(
+      circle at 15% 15%, 
+      rgba(0, 255, 163, var(--glow-intensity)) 0%, 
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 85% 85%, 
+      rgba(0, 184, 255, var(--glow-intensity)) 0%, 
+      transparent 35%
+    );
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: -1;
+  animation: ambientGlow 20s ease-in-out infinite alternate;
+}
+
+@keyframes ambientGlow {
+  0% {
+    opacity: 0.1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.3;
+    transform: scale(1.2);
+  }
+  100% {
+    opacity: 0.1;
+    transform: scale(1);
+  }
+}
+
+.glass-effect {
+  background: rgba(26, 26, 26, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  transition: all 0.3s ease;
+}
+
+.glass-effect:hover {
+  background: rgba(32, 32, 36, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+}
+
+.gradient-text {
+  @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary;
+  animation: shimmer 3s infinite;
+  background-size: 200% 100%;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.gradient-border {
+  position: relative;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.75rem;
+  padding: 2px;
+  background: linear-gradient(45deg, var(--gradient-start), var(--gradient-end));
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0.6;
+  transition: all 0.3s ease;
+}
+
+.gradient-border:hover::before {
+  opacity: 1;
+  animation: borderRotate 2s linear infinite;
+}
+
+@keyframes borderRotate {
+  0% {
+    background: linear-gradient(45deg, var(--gradient-start), var(--gradient-end));
+  }
+  25% {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+  }
+  50% {
+    background: linear-gradient(225deg, var(--gradient-start), var(--gradient-end));
+  }
+  75% {
+    background: linear-gradient(315deg, var(--gradient-start), var(--gradient-end));
+  }
+  100% {
+    background: linear-gradient(45deg, var(--gradient-start), var(--gradient-end));
+  }
+}
+
+/* Fancy button animations */
+@layer components {
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary to-secondary text-black font-semibold px-4 py-2 rounded-lg 
+    hover:opacity-90 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98];
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+  
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: 0.5s;
+    z-index: -1;
+  }
+  
+  .btn-primary:hover::after {
+    left: 100%;
+  }
+  
+  .btn-secondary {
+    @apply bg-surface text-white font-semibold px-4 py-2 rounded-lg border border-gray-700
+    hover:bg-gray-800 transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98];
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .btn-secondary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.05), transparent);
+    transform: translateX(-100%);
+    transition: 0.5s;
+  }
+  
+  .btn-secondary:hover::before {
+    transform: translateX(100%);
+  }
+  
+  .card {
+    @apply glass-effect rounded-xl p-6 shadow-lg transition-all duration-200 hover:shadow-xl;
+  }
+  
+  .input {
+    @apply bg-background border border-gray-700 rounded-lg px-4 py-2 focus:outline-none 
+    focus:ring-2 focus:ring-primary transition-all duration-200;
+  }
+
+  .nav-link {
+    @apply text-gray-400 hover:text-white transition-colors duration-200;
+  }
+
+  .stats-card {
+    @apply glass-effect rounded-xl p-4 flex flex-col items-center justify-center;
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+  
+  .stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .trading-pair {
+    @apply flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-800 transition-colors duration-200;
+  }
+  
+  /* New particle effect container */
+  .particles-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+  }
+  
+  /* Floating element animation */
+  .float-animation {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-20px); }
+    100% { transform: translateY(0px); }
+  }
+  
+  /* Subtle glow effect for cards */
+  .glow-effect {
+    box-shadow: 0 0 15px rgba(0, 255, 163, 0.2), 
+                0 0 30px rgba(0, 184, 255, 0.1);
+    transition: all 0.3s ease;
+  }
+  
+  .glow-effect:hover {
+    box-shadow: 0 0 20px rgba(0, 255, 163, 0.3), 
+                0 0 40px rgba(0, 184, 255, 0.2);
+  }
+} 
