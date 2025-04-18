@@ -12,6 +12,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
 import { Connection, PublicKey, TransactionSignature } from "@solana/web3.js";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { TransferModal } from "./TransferModal";
+import { TradeModal } from "./TradeModal";
+import { AdvancedOrderModal } from "./AdvancedOrderModal";
 
 // Retry function for operations that might hit rate limits
 const retryOperation = async <T,>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2500): Promise<T> => {
@@ -61,6 +67,8 @@ export function SubaccountList() {
   const [isCreating, setIsCreating] = useState(false);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [newSubaccountPubkey, setNewSubaccountPubkey] = useState<PublicKey | null>(null);
+  const [viewWalletAddress, setViewWalletAddress] = useState<string>("");
+  const [isViewingOtherWallet, setIsViewingOtherWallet] = useState(false);
 
   const fetchSubaccounts = async () => {
     if (!driftClient || !publicKey) return;
@@ -196,6 +204,30 @@ export function SubaccountList() {
     console.log(`Trade clicked for subaccount: ${subAccountId}`);
     toast.success(`Navigate to trade for subaccount ${subAccountId} (Not implemented yet)`);
     // TODO: Implement navigation to trading view
+  };
+
+  const handleViewWallet = async (address: string) => {
+    try {
+      const pubkey = new PublicKey(address);
+      setLoading(true);
+      const accounts = await retryOperation(async () => {
+        return await driftClient.getUserAccountsForAuthority(pubkey);
+      });
+      setSubaccounts(accounts);
+      setIsViewingOtherWallet(true);
+      toast.success(`Viewing subaccounts for wallet: ${address}`);
+    } catch (error) {
+      console.error("Error viewing wallet:", error);
+      toast.error("Invalid wallet address");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetToConnectedWallet = async () => {
+    if (!publicKey) return;
+    setIsViewingOtherWallet(false);
+    await fetchSubaccounts();
   };
 
   // Animation variants
@@ -344,15 +376,53 @@ export function SubaccountList() {
           animate={{ opacity: 1, x: 0 }}
           className="text-2xl font-bold gradient-text"
         >
-          Your Subaccounts
+          {isViewingOtherWallet ? "Viewing Other Wallet" : "Your Subaccounts"}
         </motion.h2>
         
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
+        <div className="flex items-center gap-4">
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <FiActivity className="text-lg" />
+                View Other Wallet
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>View Wallet Subaccounts</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="wallet-address">Wallet Address</Label>
+                  <Input
+                    id="wallet-address"
+                    placeholder="Enter Solana wallet address"
+                    value={viewWalletAddress}
+                    onChange={(e) => setViewWalletAddress(e.target.value)}
+                  />
+                </div>
+                <Button 
+                  className="w-full"
+                  onClick={() => handleViewWallet(viewWalletAddress)}
+                  disabled={!viewWalletAddress}
+                >
+                  View Subaccounts
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {isViewingOtherWallet && (
+            <Button 
+              variant="outline" 
+              onClick={resetToConnectedWallet}
+              className="flex items-center gap-2"
+            >
+              <FiActivity className="text-lg" />
+              Back to My Wallet
+            </Button>
+          )}
+
           <Button 
             className="bg-gray-800 hover:bg-gray-700"
             onClick={handleCreateSubaccount}
@@ -375,7 +445,7 @@ export function SubaccountList() {
               </>
             )}
           </Button>
-        </motion.div>
+        </div>
       </div>
       
       <motion.div 
@@ -485,30 +555,58 @@ export function SubaccountList() {
                   </div>
 
                   <div className="flex space-x-2 pt-4">
-                    <Button
-                      variant="outline"
-                      className="flex-1 group relative overflow-hidden"
-                      onClick={() => handleDeposit(account.subAccountId)}
-                    >
-                      <span className="absolute inset-0 w-0 bg-gradient-to-r from-primary to-secondary opacity-10 transition-all duration-300 group-hover:w-full"></span>
-                      Deposit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1 group relative overflow-hidden border-red-500/50 text-red-400 hover:bg-red-900/30 hover:text-red-300 hover:border-red-500/80"
-                      onClick={() => handleWithdraw(account.subAccountId)}
-                    >
-                       <span className="absolute inset-0 w-0 bg-gradient-to-r from-red-500 to-pink-600 opacity-10 transition-all duration-300 group-hover:w-full"></span>
-                      Withdraw
-                    </Button>
+                    <TransferModal
+                      subAccountId={account.subAccountId}
+                      type="deposit"
+                      trigger={
+                        <Button 
+                          variant="outline" 
+                          className="flex-1 group relative overflow-hidden"
+                        >
+                          <span className="absolute inset-0 w-0 bg-gradient-to-r from-primary to-secondary opacity-10 transition-all duration-300 group-hover:w-full"></span>
+                          Deposit
+                        </Button>
+                      }
+                    />
+                    <TransferModal
+                      subAccountId={account.subAccountId}
+                      type="withdraw"
+                      trigger={
+                        <Button
+                          variant="outline"
+                          className="flex-1 group relative overflow-hidden border-red-500/50 text-red-400 hover:bg-red-900/30 hover:text-red-300 hover:border-red-500/80"
+                        >
+                          <span className="absolute inset-0 w-0 bg-gradient-to-r from-red-500 to-pink-600 opacity-10 transition-all duration-300 group-hover:w-full"></span>
+                          Withdraw
+                        </Button>
+                      }
+                    />
                   </div>
-                  <Button
-                    className="w-full mt-2 group relative overflow-hidden bg-gradient-to-r from-primary to-secondary text-black"
-                    onClick={() => handleTrade(account.subAccountId)}
-                  >
-                    <span className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
-                    Trade
-                  </Button>
+                  <div className="flex space-x-2">
+                    <TradeModal
+                      subAccountId={account.subAccountId}
+                      trigger={
+                        <Button
+                          className="flex-1 group relative overflow-hidden bg-gradient-to-r from-primary to-secondary text-black"
+                        >
+                          <span className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
+                          Trade
+                        </Button>
+                      }
+                    />
+                    <AdvancedOrderModal
+                      subAccountId={account.subAccountId}
+                      trigger={
+                        <Button
+                          variant="outline"
+                          className="flex-1 group relative overflow-hidden border-purple-500/50 text-purple-400 hover:bg-purple-900/30 hover:text-purple-300 hover:border-purple-500/80"
+                        >
+                          <span className="absolute inset-0 w-0 bg-gradient-to-r from-purple-500 to-pink-600 opacity-10 transition-all duration-300 group-hover:w-full"></span>
+                          Advanced
+                        </Button>
+                      }
+                    />
+                  </div>
                 </div>
               </CardContent>
             </Card>

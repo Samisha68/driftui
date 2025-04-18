@@ -8,11 +8,12 @@ import { toast } from "react-hot-toast";
 
 // Array of fallback RPC endpoints
 const RPC_ENDPOINTS = [
-  "https://api.devnet.solana.com", // Solana default devnet - try this first
-  "https://devnet.genesysgo.net", // GenesysGo devnet
-  process.env.NEXT_PUBLIC_HELIUS_RPC_URL, // Only use Helius as last resort
-  // Add more fallback RPCs if available
-];
+  "https://api.devnet.solana.com",
+  "https://devnet.genesysgo.net",
+  "https://rpc.ankr.com/solana_devnet",
+  "https://solana-devnet.g.alchemy.com/v2/demo",
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL,
+].filter(Boolean);
 
 const DriftClientContext = createContext<DriftClient | null>(null);
 
@@ -102,11 +103,14 @@ export const DriftClientProvider = ({ children }: { children: React.ReactNode })
       try {
         console.log('Checking RPC connection...', rpcUrl);
         
+        // First, check if the RPC is responsive
+        const startTime = Date.now();
         await retryWithBackoff(async () => {
           const epochInfo = await connection.getEpochInfo();
-          console.log('RPC Connection successful. Epoch:', epochInfo.epoch);
+          const responseTime = Date.now() - startTime;
+          console.log(`RPC Connection successful. Epoch: ${epochInfo.epoch}, Response time: ${responseTime}ms`);
           return epochInfo;
-        });
+        }, 3, 2000); // Reduced retries and base delay for initial check
 
         console.log('Initializing DriftClient with publicKey:', publicKey?.toBase58(), 'and RPC:', rpcUrl);
         client = new DriftClient({
@@ -117,8 +121,10 @@ export const DriftClientProvider = ({ children }: { children: React.ReactNode })
             signAllTransactions: signAllTransactions,
           },
           env: "devnet",
-          // Add optional programID if needed to ensure connection to the correct program
-          // programID: ProgramID
+          opts: {
+            commitment: 'confirmed',
+            skipPreflight: true,
+          }
         });
         console.log('DriftClient instance created.');
         
@@ -129,37 +135,54 @@ export const DriftClientProvider = ({ children }: { children: React.ReactNode })
             throw new Error("DriftClient was not properly initialized");
           }
           
-          const localClient = client; // Create a non-null reference
+          const localClient = client;
           
+          // Try to subscribe with a shorter timeout
           await retryWithBackoff(async () => {
-            await localClient.subscribe();
+            await Promise.race([
+              localClient.subscribe(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Subscription timeout')), 10000)
+              )
+            ]);
             console.log('DriftClient subscribed successfully.');
             return true;
-          });
+          }, 3, 3000);
           
           setDriftClient(localClient);
           toast.success('Connected to Drift protocol');
         } catch (subscribeError) {
-          console.error('Error during DriftClient subscription after retries:', subscribeError);
+          console.error('Error during DriftClient subscription:', subscribeError);
           
           // Try next RPC endpoint if available
           const nextRpc = switchToNextRpc();
           if (nextRpc && nextRpc !== rpcUrl) {
             console.log('Switching to alternate RPC endpoint:', nextRpc);
-            // This will trigger a new useEffect cycle with the new RPC
+            toast('Trying alternate RPC endpoint...', {
+              icon: '🔄',
+              style: {
+                background: '#1e1e2a',
+                color: '#fff',
+              }
+            });
             return;
           }
           
           if (client && client.accountSubscriber) {
             try {
-              // Try alternative subscription method
-              const localClient = client; // Create a non-null reference
+              // Try alternative subscription method with timeout
+              const localClient = client;
               
               await retryWithBackoff(async () => {
-                await localClient.accountSubscriber.subscribe();
+                await Promise.race([
+                  localClient.accountSubscriber.subscribe(),
+                  new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Subscription timeout')), 10000)
+                  )
+                ]);
                 console.log('Alternative subscription method successful');
                 return true;
-              });
+              }, 2, 3000);
               
               setDriftClient(localClient);
               toast.success('Connected to Drift protocol');
@@ -179,23 +202,29 @@ export const DriftClientProvider = ({ children }: { children: React.ReactNode })
               });
             }
           } else {
-            toast.error('Failed to subscribe to Drift updates');
+            toast.error('Failed to subscribe to Drift updates. Please try again later.');
           }
         }
 
       } catch (initError) {
-        console.error('Error during DriftClient initialization/check after retries:', initError);
+        console.error('Error during DriftClient initialization:', initError);
         
         // Try next RPC endpoint if available
         const nextRpc = switchToNextRpc();
         if (nextRpc && nextRpc !== rpcUrl) {
           console.log('Switching to alternate RPC endpoint after initialization failure:', nextRpc);
-          // This will trigger a new useEffect cycle with the new RPC
+          toast('Trying alternate RPC endpoint...', {
+            icon: '🔄',
+            style: {
+              background: '#1e1e2a',
+              color: '#fff',
+            }
+          });
           return;
         }
         
         setDriftClient(null);
-        toast.error('Failed to connect to Drift protocol');
+        toast.error('Failed to connect to Drift protocol. Please check your internet connection and try again.');
       } finally {
         setIsInitializing(false);
       }
