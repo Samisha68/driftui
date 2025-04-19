@@ -2,9 +2,9 @@
 
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useDriftClient } from "./DriftClientProvider";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { UserAccount } from "@drift-labs/sdk";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { StatsCard } from "./StatsCard";
 import { FiDollarSign, FiTrendingUp, FiPackage, FiLoader, FiPlus, FiActivity } from "react-icons/fi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,88 +18,79 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { TransferModal } from "./TransferModal";
 import { TradeModal } from "./TradeModal";
 import { AdvancedOrderModal } from "./AdvancedOrderModal";
+import BN from "bn.js";
 
-// Retry function for operations that might hit rate limits
+// Simple retry utility (can be enhanced)
 const retryOperation = async <T,>(fn: () => Promise<T>, maxRetries = 3, initialDelay = 2500): Promise<T> => {
   let retries = 0;
-  
-  while (retries < maxRetries) {
+  let delay = initialDelay;
+  while (true) {
     try {
       return await fn();
-    } catch (error) {
+    } catch (error: any) {
       retries++;
-      if (retries >= maxRetries) throw error;
-      
-      // Exponential backoff with jitter
-      const delay = initialDelay * Math.pow(2, retries) + Math.random() * 500;
-      console.log(`Retrying operation in ${Math.round(delay)}ms (attempt ${retries}/${maxRetries})...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      if (retries > maxRetries) {
+        console.error("Max retries reached for operation.", error);
+        throw error;
+      }
+      const isRateLimitError = error.message?.includes('429') || error.status === 429;
+      const waitTime = isRateLimitError ? delay * 2 : delay; // Longer wait for rate limits
+      console.log(`Operation failed (attempt ${retries}/${maxRetries}). Retrying after ${waitTime/1000}s delay... Error: ${error.message}`);
+      await sleep(waitTime);
+      delay = waitTime; // Exponential backoff might be better here
     }
   }
-  throw new Error("Maximum retries exceeded");
 };
 
 // Function to check transaction confirmation status
 const checkTransactionStatus = async (signature: string, connection: Connection): Promise<boolean> => {
-  const toastId = toast.loading('Checking transaction status...');
-  try {
-    const result = await connection.confirmTransaction(signature, 'confirmed');
-    if (result.value.err) {
-      console.error('Transaction error:', result.value.err);
-      toast.error('Transaction failed', { id: toastId });
-      return false;
+  let confirmed = false;
+  let retries = 10; // Approx 30 seconds with 3s interval
+  while (!confirmed && retries > 0) {
+    try {
+      const status = await connection.getSignatureStatus(signature, { searchTransactionHistory: true });
+      if (status && status.value && (status.value.confirmationStatus === 'confirmed' || status.value.confirmationStatus === 'finalized')) {
+        console.log(`Transaction ${signature} confirmed with status: ${status.value.confirmationStatus}`);
+        confirmed = true;
+      } else {
+        console.log(`Transaction ${signature} not confirmed yet. Status:`, status?.value?.confirmationStatus, `Retries left: ${retries - 1}`);
+        await sleep(3000); // Wait 3 seconds before retrying
+      }
+    } catch (error) {
+      console.error(`Error checking transaction status for ${signature}:`, error);
+      break; 
     }
-    
-    toast.success('Transaction confirmed!', { id: toastId });
-    return true;
-  } catch (error) {
-    console.error('Error confirming transaction:', error);
-    toast.error('Failed to confirm transaction', { id: toastId });
-    return false;
+    retries--;
   }
+  return confirmed;
 };
 
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
 export function SubaccountList() {
+  const { driftClient, userAccounts, isLoading, isSubscribed, error: providerError } = useDriftClient();
   const { publicKey } = useWallet();
-  const driftClient = useDriftClient();
-  const [subaccounts, setSubaccounts] = useState<UserAccount[]>([]);
-  const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [newSubaccountPubkey, setNewSubaccountPubkey] = useState<PublicKey | null>(null);
-  const [viewWalletAddress, setViewWalletAddress] = useState<string>("");
   const [isViewingOtherWallet, setIsViewingOtherWallet] = useState(false);
+  const [viewWalletAddress, setViewWalletAddress] = useState("");
+  const [viewedAccounts, setViewedAccounts] = useState<UserAccount[] | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
 
-  const fetchSubaccounts = async () => {
-    if (!driftClient || !publicKey) return;
-    console.log('Fetching subaccounts for:', publicKey.toBase58());
-    setLoading(true);
-    try {
-      const accounts = await retryOperation(async () => {
-        return await driftClient.getUserAccountsForAuthority(publicKey);
-      });
-      console.log('Fetched subaccounts:', accounts);
-      setSubaccounts(accounts);
-    } catch (error) {
-      console.error("Error fetching subaccounts:", error);
-      toast.error("Failed to load subaccounts");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Check transaction status effect
   useEffect(() => {
     const verifyTransaction = async () => {
       if (!txSignature || !driftClient) return;
-      
-      const confirmed = await checkTransactionStatus(
-        txSignature, 
-        driftClient.connection
-      );
+  
+      toast.loading('Verifying transaction...'); 
+      const confirmed = await checkTransactionStatus(txSignature, driftClient.connection);
       
       if (confirmed) {
-        await fetchSubaccounts();
+        toast.success('Transaction confirmed! Subaccount created.');
+        setTxSignature(null);
+        setNewSubaccountPubkey(null);
+      } else {
+        toast.error('Transaction confirmation failed or timed out.');
         setTxSignature(null);
         setNewSubaccountPubkey(null);
       }
@@ -110,84 +101,52 @@ export function SubaccountList() {
     }
   }, [txSignature, driftClient]);
 
-  useEffect(() => {
-    fetchSubaccounts();
-  }, [driftClient, publicKey]);
-
   const handleCreateSubaccount = async () => {
-    if (!driftClient || !publicKey) {
-      console.error('Drift client or public key not available');
-      toast?.error('Wallet not connected or Drift client not initialized');
+    if (isLoading || !isSubscribed || !driftClient || !publicKey) {
+       const reason = isLoading ? "Client loading" :
+                      !isSubscribed ? "Client not subscribed" :
+                      !driftClient ? "Client not available" :
+                      !publicKey ? "Wallet not connected" : "Unknown reason";
+      console.error(`Create subaccount prerequisites not met: ${reason}`);
+      toast?.error(`Cannot create subaccount: ${reason}`);
       return;
     }
 
     setIsCreating(true);
     console.log('Attempting to create subaccount...');
-    console.log('Current subaccounts:', subaccounts);
-    console.log('Public key:', publicKey.toBase58());
-    console.log('Drift client initialized:', !!driftClient);
-    console.log('Drift client state:', {
-      isSubscribed: driftClient.accountSubscriber?.isSubscribed,
-      perpMarkets: driftClient.getPerpMarketAccounts().length,
-      spotMarkets: driftClient.getSpotMarketAccounts().length
-    });
-
+    
     try {
-      const nextSubAccountId = subaccounts.length;
-      console.log(`Using nextSubAccountId: ${nextSubAccountId}`);
-
-      // Ensure client is subscribed
-      if (driftClient && driftClient.accountSubscriber) {
-        console.log('Ensuring client is properly subscribed...');
-        // Use proper subscription method instead of accessing private property
-        if (!driftClient.accountSubscriber.isSubscribed) {
-          await retryOperation(async () => {
-            await driftClient.accountSubscriber.subscribe();
-            return true;
-          });
-          console.log('Client successfully subscribed');
-        } else {
-          console.log('Client was already subscribed');
-        }
+      const currentAccounts = userAccounts || [];
+      const existingIds = currentAccounts.map(acc => acc.subAccountId).sort((a, b) => a - b);
+      let nextSubAccountId = 0;
+      while (existingIds.includes(nextSubAccountId)) {
+        nextSubAccountId++;
       }
+      console.log(`Using nextSubAccountId: ${nextSubAccountId}`);
 
       console.log('About to call initializeUserAccount...');
       const [signature, userAccountPubkey] = await retryOperation(async () => {
-        return await driftClient.initializeUserAccount(nextSubAccountId);
+        return await driftClient.initializeUserAccount();
       });
       console.log('Subaccount creation transaction sent:', signature);
       console.log('New subaccount public key:', userAccountPubkey.toBase58());
       
-      // Store signature for verification
       setTxSignature(signature);
       setNewSubaccountPubkey(userAccountPubkey);
       toast.loading('Transaction sent! Waiting for confirmation...');
 
     } catch (error) {
       console.error("Error creating subaccount:", error);
-      
-      // More detailed error reporting
       let errorMessage = "Failed to create subaccount";
       if (error instanceof Error) {
         errorMessage += `: ${error.message}`;
-        console.error("Error stack:", error.stack);
-        
-        // Handle specific errors
-        if (error.message.includes("429")) {
-          errorMessage = "Rate limit exceeded. Please try again in a few moments.";
-        } else if (error.message.includes("Network request failed")) {
-          errorMessage = "Network request failed. Please check your connection.";
-        }
       }
-      
-      console.error("Error details:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
       toast?.error(errorMessage);
     } finally {
       setIsCreating(false);
     }
   };
 
-  // --- Define handler functions ---
   const handleDeposit = (subAccountId: number) => {
     console.log(`Deposit clicked for subaccount: ${subAccountId}`);
     toast(`Deposit action for subaccount ${subAccountId} (Not implemented yet)`);
@@ -207,27 +166,34 @@ export function SubaccountList() {
   };
 
   const handleViewWallet = async (address: string) => {
+    if (!driftClient) {
+      toast.error("Drift client not initialized");
+      return;
+    }
+
     try {
       const pubkey = new PublicKey(address);
-      setLoading(true);
+      setViewLoading(true);
+      setViewedAccounts(null);
       const accounts = await retryOperation(async () => {
         return await driftClient.getUserAccountsForAuthority(pubkey);
-      });
-      setSubaccounts(accounts);
+      }, 5, 1000);
+      setViewedAccounts(accounts);
       setIsViewingOtherWallet(true);
-      toast.success(`Viewing subaccounts for wallet: ${address}`);
+      toast.success(`Viewing subaccounts for wallet: ${address.substring(0,6)}...`);
     } catch (error) {
       console.error("Error viewing wallet:", error);
-      toast.error("Invalid wallet address");
+      setViewedAccounts(null);
+      toast.error("Could not fetch accounts for this address.");
     } finally {
-      setLoading(false);
+      setViewLoading(false);
     }
   };
 
-  const resetToConnectedWallet = async () => {
-    if (!publicKey) return;
+  const resetToConnectedWallet = () => {
     setIsViewingOtherWallet(false);
-    await fetchSubaccounts();
+    setViewedAccounts(null);
+    setViewWalletAddress("");
   };
 
   // Animation variants
@@ -262,7 +228,11 @@ export function SubaccountList() {
     }
   };
 
-  if (loading && subaccounts.length === 0) {
+  // Determine which accounts to display
+  const displayAccounts = isViewingOtherWallet ? viewedAccounts : userAccounts;
+  const displayLoading = isViewingOtherWallet ? viewLoading : isLoading;
+
+  if (displayLoading && (!displayAccounts || displayAccounts.length === 0)) {
     return (
       <div className="flex flex-col justify-center items-center min-h-[400px] gap-6">
         <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary"></div>
@@ -272,13 +242,13 @@ export function SubaccountList() {
           transition={{ delay: 0.5 }}
           className="text-gray-400 text-lg"
         >
-          Loading your subaccounts...
+          {isViewingOtherWallet ? "Loading specified wallet accounts..." : "Loading your subaccounts..."}
         </motion.p>
       </div>
     );
   }
 
-  if (subaccounts.length === 0) {
+  if (!displayLoading && (!displayAccounts || displayAccounts.length === 0)) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -286,7 +256,6 @@ export function SubaccountList() {
         className="text-center py-12"
       >
         <div className="max-w-md mx-auto glass-effect rounded-xl p-8 relative overflow-hidden glow-effect">
-          {/* Decorative elements */}
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-secondary opacity-60"></div>
           <div className="absolute -top-16 -right-16 w-32 h-32 bg-primary opacity-10 rounded-full blur-xl"></div>
           <div className="absolute -bottom-16 -left-16 w-32 h-32 bg-secondary opacity-10 rounded-full blur-xl"></div>
@@ -297,7 +266,7 @@ export function SubaccountList() {
             transition={{ type: "spring", delay: 0.2, duration: 0.8 }}
             className="rounded-full bg-gray-800 p-4 w-20 h-20 mx-auto mb-6 flex items-center justify-center"
           >
-            <FiPlus className="text-primary text-3xl" />
+            <FiPackage className="text-primary text-3xl" />
           </motion.div>
           
           <motion.h2 
@@ -306,7 +275,7 @@ export function SubaccountList() {
             transition={{ delay: 0.3 }}
             className="text-2xl font-semibold mb-4 gradient-text"
           >
-            No Subaccounts Found
+            {isViewingOtherWallet ? "No Subaccounts Found for Address" : "No Subaccounts Found"}
           </motion.h2>
           
           <motion.p 
@@ -315,41 +284,57 @@ export function SubaccountList() {
             transition={{ delay: 0.4 }}
             className="text-gray-400 mb-8"
           >
-            You don't have any subaccounts yet. Create one to start trading on Drift.
+            {isViewingOtherWallet ? 
+             `The wallet ${viewWalletAddress.substring(0,6)}... has no Drift subaccounts.` :
+             "You don't have any subaccounts yet. Create one to start trading on Drift."
+            }
           </motion.p>
           
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Button 
-              className="w-full bg-gradient-to-r from-primary to-secondary text-black relative overflow-hidden group"
-              onClick={handleCreateSubaccount}
-              disabled={isCreating || !driftClient || !!txSignature}
+          {!isViewingOtherWallet && (
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              <span className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
-              {isCreating ? (
-                <>
-                  <FiLoader className="animate-spin mr-2" />
-                  Creating...
-                </>
-              ) : txSignature ? (
-                <>
-                  <FiLoader className="animate-spin mr-2" />
-                  Confirming Transaction...
-                </>
-              ) : (
-                <>
-                  <FiPlus className="mr-2" />
-                  Create Subaccount
-                </>
-              )}
-            </Button>
-          </motion.div>
+              <Button 
+                className="w-full bg-gradient-to-r from-primary to-secondary text-black relative overflow-hidden group"
+                onClick={handleCreateSubaccount}
+                disabled={isCreating || isLoading || !isSubscribed || !publicKey || !!txSignature}
+              >
+                <span className="absolute top-0 left-0 w-full h-full bg-white opacity-0 group-hover:opacity-20 transition-opacity duration-300"></span>
+                {isCreating ? (
+                  <>
+                    <FiLoader className="animate-spin mr-2" />
+                    Creating...
+                  </>
+                ) : txSignature ? (
+                  <>
+                    <FiLoader className="animate-spin mr-2" />
+                    Confirming Transaction...
+                  </>
+                ) : (
+                  <>
+                    <FiPlus className="mr-2" />
+                    Create Subaccount
+                  </>
+                )}
+              </Button>
+            </motion.div>
+          )}
           
+          {isViewingOtherWallet && (
+            <Button 
+              variant="outline" 
+              onClick={resetToConnectedWallet}
+              className="flex items-center gap-2"
+            >
+              <FiActivity className="text-lg" />
+              Back to My Wallet
+            </Button>
+          )}
+
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -376,7 +361,7 @@ export function SubaccountList() {
           animate={{ opacity: 1, x: 0 }}
           className="text-2xl font-bold gradient-text"
         >
-          {isViewingOtherWallet ? "Viewing Other Wallet" : "Your Subaccounts"}
+          {isViewingOtherWallet ? `Viewing: ${viewWalletAddress.substring(0,6)}...` : "Your Subaccounts"}
         </motion.h2>
         
         <div className="flex items-center gap-4">
@@ -404,9 +389,10 @@ export function SubaccountList() {
                 <Button 
                   className="w-full"
                   onClick={() => handleViewWallet(viewWalletAddress)}
-                  disabled={!viewWalletAddress}
+                  disabled={!viewWalletAddress || viewLoading}
                 >
-                  View Subaccounts
+                  {viewLoading ? <FiLoader className="animate-spin mr-2" /> : null}
+                  {viewLoading ? "Loading..." : "View Subaccounts"}
                 </Button>
               </div>
             </DialogContent>
@@ -426,7 +412,7 @@ export function SubaccountList() {
           <Button 
             className="bg-gray-800 hover:bg-gray-700"
             onClick={handleCreateSubaccount}
-            disabled={isCreating || !driftClient || !!txSignature}
+            disabled={isCreating || isLoading || !isSubscribed || !publicKey || !!txSignature}
           >
             {isCreating ? (
               <>
@@ -479,7 +465,7 @@ export function SubaccountList() {
         variants={containerVariants}
         className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
       >
-        {subaccounts.map((account, index) => (
+        {displayAccounts && displayAccounts.map((account, index) => (
           <motion.div
             key={account.subAccountId}
             variants={cardVariants}
@@ -510,8 +496,8 @@ export function SubaccountList() {
                     <div className="flex items-center space-x-2">
                       <p className="text-lg font-medium">
                         {account.spotPositions
-                          .filter((p) => p.scaledBalance > 0)
-                          .map((p) => `${p.scaledBalance} USDC`)
+                          .filter((p) => p.scaledBalance.gt(new BN(0)))
+                          .map((p) => `${p.scaledBalance.toString()} USDC`)
                           .join(", ") || "0 USDC"}
                       </p>
                     </div>
@@ -524,20 +510,19 @@ export function SubaccountList() {
                     </h4>
                     <div className="space-y-2">
                       {account.perpPositions
-                        .filter((p) => p.baseAssetAmount !== 0)
+                        .filter((p) => !p.baseAssetAmount.isZero())
                         .map((p) => (
                           <div
                             key={p.marketIndex}
                             className="flex items-center justify-between p-2 rounded-lg bg-gray-800 bg-opacity-50 hover:bg-opacity-70 transition-all"
                           >
                             <span className="text-sm">Market {p.marketIndex}</span>
-                            <span className={`text-sm font-medium ${p.baseAssetAmount > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                              {p.baseAssetAmount > 0 ? "Long" : "Short"}{" "}
-                              {Math.abs(p.baseAssetAmount)}
+                            <span className={`text-sm font-medium ${p.baseAssetAmount.gt(new BN(0)) ? 'text-green-400' : 'text-red-400'}`}>
+                              {p.baseAssetAmount.gt(new BN(0)) ? "Long" : "Short"} {p.baseAssetAmount.abs().toString()}
                             </span>
                           </div>
                         ))}
-                      {account.perpPositions.filter(p => p.baseAssetAmount !== 0).length === 0 && (
+                      {account.perpPositions.filter(p => !p.baseAssetAmount.isZero()).length === 0 && (
                         <p className="text-sm text-gray-400 p-2">No open positions</p>
                       )}
                     </div>
@@ -614,20 +599,30 @@ export function SubaccountList() {
         ))}
         
         {/* Add account card */}
-        <motion.div
-          variants={cardVariants}
-          whileHover="hover"
-          className="gradient-border h-full"
-        >
-          <Card className="glass-effect border-none h-full flex flex-col justify-center items-center py-8 cursor-pointer"
-                onClick={handleCreateSubaccount}>
-            <div className="rounded-full bg-gray-800 p-4 mb-4">
-              <FiPlus className="text-primary text-2xl" />
-            </div>
-            <p className="text-gray-400">Create New Subaccount</p>
-          </Card>
-        </motion.div>
+        {!isViewingOtherWallet && (
+          <motion.div
+            variants={cardVariants}
+            whileHover="hover"
+            className="gradient-border h-full"
+          >
+            <Card className="glass-effect border-none h-full flex flex-col justify-center items-center py-8 cursor-pointer"
+                  onClick={handleCreateSubaccount}>
+              <div className="rounded-full bg-gray-800 p-4 mb-4">
+                <FiPlus className="text-primary text-2xl" />
+              </div>
+              <p className="text-gray-400">Create New Subaccount</p>
+            </Card>
+          </motion.div>
+        )}
       </motion.div>
+
+      <AnimatePresence>
+        {providerError && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="error-banner bg-red-500/10 border border-red-500/30 text-red-300 p-3 rounded-md">
+            <p><span className="font-semibold">Provider Error:</span> {providerError}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 } 
