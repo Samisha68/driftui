@@ -146,7 +146,7 @@ export default function Home() {
             className="text-center mb-12" // Reduced margin bottom
           >
             <h1 className="text-5xl sm:text-6xl font-bold mb-6 text-white">
-              Drift Trading Platform
+              Trade with Drift
             </h1>
             <motion.p 
               className="text-gray-400 text-lg max-w-2xl mx-auto"

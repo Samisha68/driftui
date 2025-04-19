@@ -16,7 +16,7 @@ const MARKETS = [
 ];
 
 export const PlaceOrderForm = () => {
-  const driftClient = useDriftClient();
+  const { driftClient, isSubscribed } = useDriftClient();
   const [market, setMarket] = useState("SOL-PERP");
   const [orderType, setOrderType] = useState("market");
   const [size, setSize] = useState("");
@@ -24,8 +24,8 @@ export const PlaceOrderForm = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePlaceOrder = async () => {
-    if (!driftClient || !driftClient.accountSubscriber?.subscribed) {
-      toast.error("Not connected to Drift protocol");
+    if (!driftClient || !isSubscribed) {
+      toast.error("Not connected or subscribed to Drift protocol");
       return;
     }
 
@@ -34,7 +34,14 @@ export const PlaceOrderForm = () => {
       const sizeNum = parseFloat(size);
       if (isNaN(sizeNum) || sizeNum <= 0) {
         toast.error("Please enter a valid size");
+        setIsLoading(false);
         return;
+      }
+
+      if (orderType === "limit" && (isNaN(parseFloat(price)) || parseFloat(price) <= 0)) {
+         toast.error("Please enter a valid positive limit price");
+         setIsLoading(false); 
+         return;
       }
 
       const orderParams = {
@@ -45,12 +52,18 @@ export const PlaceOrderForm = () => {
         price: orderType === "limit" ? parseFloat(price) : undefined,
       };
 
-      const tx = await driftClient.placePerpOrder(orderParams);
-      toast.success(`Order placed successfully`);
-      console.log("Order transaction:", tx);
-    } catch (error) {
+      console.log("Attempting to place order with params:", orderParams);
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const tx = `simulated_tx_${Date.now()}`;
+
+      toast.success(`Order placed successfully (Simulated)`);
+      console.log("Order transaction (Simulated):", tx);
+      setSize("");
+      setPrice("");
+    } catch (error: any) {
       console.error("Order error:", error);
-      toast.error("Failed to place order. Please try again.");
+      toast.error(`Failed to place order: ${error.message}`);
     } finally {
       setIsLoading(false);
     }

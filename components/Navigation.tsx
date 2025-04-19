@@ -19,7 +19,7 @@ export function Navigation() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center space-x-2">
               <span className="text-2xl font-bold gradient-text">Drift</span>
-              <span className="text-white">Trading</span>
+              <span className="text-white">Deck</span>
             </Link>
           </div>
 

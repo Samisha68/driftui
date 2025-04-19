@@ -7,7 +7,7 @@ import { UserAccount } from "@drift-labs/sdk";
 import { motion, AnimatePresence } from "framer-motion";
 import { StatsCard } from "./StatsCard";
 import { FiDollarSign, FiTrendingUp, FiPackage, FiLoader, FiPlus, FiActivity } from "react-icons/fi";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "react-hot-toast";
@@ -540,32 +540,7 @@ export function SubaccountList() {
                   </div>
 
                   <div className="flex space-x-2 pt-4">
-                    <TransferModal
-                      subAccountId={account.subAccountId}
-                      type="deposit"
-                      trigger={
-                        <Button 
-                          variant="outline" 
-                          className="flex-1 group relative overflow-hidden"
-                        >
-                          <span className="absolute inset-0 w-0 bg-gradient-to-r from-primary to-secondary opacity-10 transition-all duration-300 group-hover:w-full"></span>
-                          Deposit
-                        </Button>
-                      }
-                    />
-                    <TransferModal
-                      subAccountId={account.subAccountId}
-                      type="withdraw"
-                      trigger={
-                        <Button
-                          variant="outline"
-                          className="flex-1 group relative overflow-hidden border-red-500/50 text-red-400 hover:bg-red-900/30 hover:text-red-300 hover:border-red-500/80"
-                        >
-                          <span className="absolute inset-0 w-0 bg-gradient-to-r from-red-500 to-pink-600 opacity-10 transition-all duration-300 group-hover:w-full"></span>
-                          Withdraw
-                        </Button>
-                      }
-                    />
+                    <TransferModal subAccountId={account.subAccountId} />
                   </div>
                   <div className="flex space-x-2">
                     <TradeModal

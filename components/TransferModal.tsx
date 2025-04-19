@@ -1,100 +1,123 @@
+"use client";
+
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useDriftClient } from "./DriftClientProvider";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { toast } from "react-hot-toast";
-import { PublicKey } from "@solana/web3.js";
-import { BN } from "@drift-labs/sdk";
+import { BN, QUOTE_SPOT_MARKET_INDEX } from "@drift-labs/sdk";
 
-interface TransferModalProps {
-  subAccountId: number;
-  type: "deposit" | "withdraw";
-  trigger: React.ReactNode;
-}
-
-export function TransferModal({ subAccountId, type, trigger }: TransferModalProps) {
-  const [amount, setAmount] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const driftClient = useDriftClient();
+export const TransferModal = ({ subAccountId }: { subAccountId: number }) => {
+  // Destructure driftClient from the context
+  const { driftClient: client, isSubscribed } = useDriftClient(); 
   const { publicKey } = useWallet();
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState<"deposit" | "withdraw">("deposit");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const handleTransfer = async () => {
-    if (!driftClient || !publicKey || !amount) return;
+    // Use the destructured client object
+    if (!client || !isSubscribed) { 
+      toast.error("Not connected or subscribed to Drift protocol");
+      return;
+    }
+    if (!publicKey) {
+      toast.error("Wallet not connected");
+      return;
+    }
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      toast.error("Please enter a valid positive amount");
+      return;
+    }
 
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      const amountBN = new BN(parseFloat(amount) * 1e6); // Convert to lamports (6 decimals for USDC)
+      const amountBN = new BN(parseFloat(amount) * 10 ** 6); // Assume 6 decimals for USDC
+      let txSig: string;
 
       if (type === "deposit") {
-        const tx = await driftClient.deposit(
+        // Call deposit on the client object
+        txSig = await client.deposit(
           amountBN,
-          subAccountId,
+          QUOTE_SPOT_MARKET_INDEX, // Use imported constant for USDC market index
+          publicKey,
+          subAccountId
+        );
+        toast.success(`Deposited ${amount} USDC successfully`);
+      } else { // Withdraw
+        // Check active subaccount ID before withdrawing
+        if (client.activeSubAccountId !== subAccountId) {
+          toast.error(`Please ensure subaccount ${subAccountId} is selected as active before withdrawing.`);
+          setIsLoading(false);
+          return;
+        }
+        // Call withdraw on the client object (without subAccountId)
+        txSig = await client.withdraw(
+          amountBN,
+          QUOTE_SPOT_MARKET_INDEX,
           publicKey
         );
-        const signature = await driftClient.sendTransaction(tx);
-        toast.loading("Confirming deposit...");
-        await driftClient.connection.confirmTransaction(signature);
-        toast.success("Deposit successful!");
-      } else {
-        const tx = await driftClient.withdraw(
-          amountBN,
-          subAccountId,
-          publicKey
-        );
-        const signature = await driftClient.sendTransaction(tx);
-        toast.loading("Confirming withdrawal...");
-        await driftClient.connection.confirmTransaction(signature);
-        toast.success("Withdrawal successful!");
+        toast.success(`Withdrawn ${amount} USDC successfully`);
       }
-    } catch (error) {
-      console.error(`Error during ${type}:`, error);
-      toast.error(`Failed to ${type}`);
+
+      console.log(`${type} transaction: ${txSig}`);
+      await client.connection.confirmTransaction(txSig, 'confirmed');
+      setAmount("");
+      setIsOpen(false); // Close modal on success
+    } catch (error: any) {
+      console.error(`${type} error:`, error);
+      toast.error(`Failed to ${type}: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        {trigger}
+        <Button variant="outline" size="sm">Deposit / Withdraw</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{type === "deposit" ? "Deposit Funds" : "Withdraw Funds"}</DialogTitle>
+          <DialogTitle>{type === "deposit" ? "Deposit" : "Withdraw"} USDC to/from Subaccount #{subAccountId}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
+          <div className="flex justify-center space-x-2">
+            <Button 
+              variant={type === "deposit" ? "default" : "outline"} 
+              onClick={() => setType("deposit")}
+              disabled={isLoading}
+            >
+              Deposit
+            </Button>
+            <Button 
+              variant={type === "withdraw" ? "default" : "outline"}
+              onClick={() => setType("withdraw")}
+              disabled={isLoading}
+            >
+              Withdraw
+            </Button>
+          </div>
           <div className="space-y-2">
-            <Label htmlFor="amount">Amount (USDC)</Label>
+            <Label htmlFor="transfer-amount">Amount</Label>
             <Input
-              id="amount"
+              id="transfer-amount"
               type="number"
-              placeholder="Enter amount"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              min="0"
-              step="0.000001"
+              placeholder="e.g., 100"
+              disabled={isLoading}
             />
           </div>
-          <Button 
-            className="w-full"
-            onClick={handleTransfer}
-            disabled={!amount || isLoading}
-          >
-            {isLoading ? (
-              <>
-                <span className="animate-spin mr-2">⏳</span>
-                Processing...
-              </>
-            ) : (
-              type === "deposit" ? "Deposit" : "Withdraw"
-            )}
+          <Button onClick={handleTransfer} disabled={isLoading || !amount} className="w-full">
+            {isLoading ? "Processing..." : `Confirm ${type}`}
           </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
-} 
+}; 
