@@ -1,6 +1,7 @@
 {
-  "/dashboard/page": "app/dashboard/page.js",
-  "/portfolio/page": "app/portfolio/page.js",
+  "/_not-found": "app/_not-found.js",
   "/markets/page": "app/markets/page.js",
-  "/page": "app/page.js"
+  "/portfolio/page": "app/portfolio/page.js",
+  "/page": "app/page.js",
+  "/dashboard/page": "app/dashboard/page.js"
 }
