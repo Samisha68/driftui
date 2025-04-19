@@ -1,62 +1,74 @@
-# Drift Trading UI
+# DriftDeck - A Perp Trading Dashboard on Solana
 
-A UI for managing Drift subaccounts and trading on the Solana blockchain.
+**Trade with Drift** is a feature-rich frontend built with **Next.js**, **TailwindCSS**, **Zustand**, and the **Drift SDK**, designed to simulate a trading experience for Drift Protocol users.
 
-## Features
+It supports viewing and managing subaccounts, balances, perp positions, and open orders. This project is tailored to demonstrate a realistic trading dashboard experience, even when RPC connectivity is unstable.
 
-- View connected wallet's subaccounts
-- View subaccount balances
-- View perp positions
-- View open orders
-- Deposit/Withdraw functionality
-- Place market and limit orders
+---
 
-## Prerequisites
+## 🔧 Features
 
-- Node.js 18+ and npm
-- A Solana wallet (Phantom, Solflare, etc.)
-- A Helius RPC API key (for mainnet access)
+- ✅ **Solana Wallet Adapter Integration**
+- ✅ **View Connected Wallet's Subaccounts**
+- ✅ **Balances, Positions, and Orders per Subaccount**
+- ✅ **Deposit & Withdraw (Mock UI)**
+- ✅ **Market and Limit Order Simulation**
+- ✅ **Wallet Viewer Mode** to inspect any wallet’s Drift data
+- ✅ **Responsive Design** using TailwindCSS
+- ✅ **Global State Management** via Zustand
 
-## Setup
+---
 
-1. Clone the repository:
+## 🚨 Note on RPC and Dummy Data
+
+Due to possible instability or rate-limiting issues with public Solana RPC endpoints (e.g., Helius or other providers), this project **uses dummy data to simulate subaccount activity**.
+
+You can easily switch to live data by plugging in:
+- `driftClient.getUserAccountsForAuthority(publicKey)`
+- `driftClient.getUser(publicKey)`
+- `driftClient.placePerpOrder(...)` and similar SDK calls
+
+Drift SDK documentation: [https://drift-labs.github.io/v2-teacher](https://drift-labs.github.io/v2-teacher)
+
+---
+
+## 🛠 Tech Stack
+
+- **Next.js** (App directory)
+- **TailwindCSS**
+- **Zustand** (for state management)
+- **Framer Motion** (animations)
+- **@drift-labs/sdk-browser**
+- **@solana/wallet-adapter**
+
+---
+
+## 📦 Getting Started
+
 ```bash
-git clone https://github.com/yourusername/drift-trading-ui.git
-cd drift-trading-ui
-```
-
-2. Install dependencies:
-```bash
+git clone https://github.com/Samisha68/driftui.git
+cd driftui
 npm install
-```
-
-3. Create a `.env.local` file in the root directory and add your Helius RPC API key:
-```
-NEXT_PUBLIC_HELIUS_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY
-```
-
-4. Start the development server:
-```bash
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+> ⚠️ You may need to configure your wallet adapter and network inside the `WalletProvider` wrapper.
 
-## Usage
+---
 
-1. Connect your Solana wallet using the "Connect Wallet" button
-2. View your subaccounts and their balances
-3. Manage your positions and place orders
+## 🧠 Future Improvements
 
-## Development
+- Switch dummy data to live Drift client responses
+- Add PnL tracking and margin health
+- Integrate charts and advanced order types (TP/SL, scaled orders)
 
-The project uses:
-- Next.js for the framework
-- Tailwind CSS for styling
-- Zustand for state management
-- Drift SDK for blockchain interaction
-- Solana Wallet Adapter for wallet integration
+---
 
-## License
+## 📄 License
 
-MIT 
+This project is for educational/demo purposes and is not intended for production trading use.
+
+---
+
+Built with 💙 and lots of coffee by **Samisha** ☕
+
